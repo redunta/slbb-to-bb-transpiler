@@ -4,6 +4,31 @@ Sexps-based Language to BlitzBasic transpiler
 This project is started as an experiment to provide more "convenient" way to use Blitz3D abilities.
 Instead of directly using Blitz3D Basic dialect this transpiler allows you to write program in LISP-like language (*very* limited of course). It makes possible adding virtual methods, and another syntax sugar.
 
+## Syntax, shortly
+- Module declaration, must be the topmost expression:
+```lisp
+(@module my.useful.module (exportedA exportedB exportedC))
+```
+Here a module named `my.useful.module` is declared along with symbols (`exportedA`, `exportedB`, `exportedC`) that are exported from it. Functions and Types can be exported only.
+
+- Import declarations followed by module declaration have the form:
+```lisp
+(@use required.module.Action)
+(@use required.module.Action ActionAlias)
+```
+By default imported symbol is available by last part of the full path,
+but if an alias provided then it will be used instead.
+
+- Variable declaration and/or assignment:
+```lisp
+(@let $varname::@int (+ 3 5))
+```
+Variable `$varname` declared having `@int` type and assigned value of the expression.
+Basic primitive types are `@int` (integer), `@str` (string), `@float` (really b3d single float), `@bool` (really integer),
+`@ptr` (for handles, also integer).
+
+
+
 ```lisp
 (@module application.launcher (run check))
 
