@@ -8,8 +8,9 @@ class Transpiler {
 	private $exportPrefix;
 	private $privatePrefix;
 	private $symbolsToExport; // ...['values']['parts'] only (not the whole node)
-	private $symbolsToImport; // alias => full name
+	private $symbolsToImport; // alias => full name without last part
 	private $outputProgramParts;
+	private $operators;
 	
 	public function __construct($ast) {
 		$this->ast = $ast;
@@ -18,6 +19,40 @@ class Transpiler {
 		$this->symbolsToExport = [];
 		$this->symbolsToImport = [];
 		$this->outputProgramParts = [];
+		$this->operators = [
+			'+' => '+', 
+			'-' => '-', 
+			'*' => '*', 
+			'/' => '/',
+			'@mod' => 'Mod',
+			'@pwr' => '^',
+			'~' => '~',
+			'>' => '>',
+			'<' => '<',
+			'>=' => '>=',
+			'<=' => '<=',
+			'=' => '=',
+			'!=' => '<>',
+			'<>' => '<>',
+			'!' => 'Not',
+			'&&' => 'And',
+			'||' => 'Or',
+			'^^' => 'Xor',
+			'&' => 'And',
+			'|' => 'Or',
+			'^' => 'Xor',
+			'<<' => 'Shl',
+			'>>' => 'Shr',
+			'@sar' => 'Sar',
+			'@int' => 'Int',
+			'@float' => 'Float',
+			'@str' => 'Str',
+			'@tnew' => 'New',
+			'@tfirst' => 'First',
+			'@tlast' => 'Last',
+			'@tbefore' => 'Before',
+			'@tafter' => 'After'
+		];
 	}
 	
 	public function run() {
@@ -49,11 +84,23 @@ class Transpiler {
 					$this->handleModuleDirective($blockItem['items'][1], $blockItem['items'][2]);
 				} else
 				if ($blockItem['items'][0]['value']['parts'][0] === '@use') {
-					$alias = isset($blockItem['items'][2]) ? 
-						$blockItem['items'][2]['value']['parts'][0]:
-						$blockItem['items'][1]['value']['parts'][\count($blockItem['items'][1]['value']['parts']) - 1];
-					$fullName = $this->nodeSymbolToOutIdentifier($blockItem['items'][1], null);
-					$this->symbolsToImport[$alias] = \str_replace('__' . $alias, '', $fullName);
+					$handleItem = function(&$blockItem) {
+						$alias = isset($blockItem['items'][2]) ? 
+							$blockItem['items'][2]['value']['parts'][0]:
+							$blockItem['items'][1]['value']['parts'][\count($blockItem['items'][1]['value']['parts']) - 1];
+						$lastPartValue = \array_pop($blockItem['items'][1]['value']['parts']);
+						$fullName = $this->nodeSymbolToOutIdentifier($blockItem['items'][1], null);
+						$this->symbolsToImport[\ucfirst($alias)] = [ 'prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst($lastPartValue)];
+					};
+					if ($blockItem['items'][1]['type'] === Parser::T_BLOCK_PRIMARY) {
+						foreach ($blockItem['items'][1]['items'] as $nodeSymbolImported) {
+							$handleItem(new \ArrayObject([
+								'items' => [null, $nodeSymbolImported]
+							]));
+						}
+					} else {
+						$handleItem($blockItem);
+					}
 				} else {
 					$this->handlePrimaryBlock($blockItem);
 				}
@@ -63,7 +110,7 @@ class Transpiler {
 		}
 	}
 	
-	private function nodeSymbolToOutIdentifier($nodeSymbol, $prefix = null) {
+	private function nodeSymbolToOutIdentifier($nodeSymbol, $prefix = null, $defaultToLocalPrefix = false) {
 		$result = null;
 		foreach ($nodeSymbol['value']['parts'] as &$curPart) {
 			$curPart = \ucfirst($curPart);
@@ -77,19 +124,27 @@ class Transpiler {
 				$lastPart = \array_pop($nodeSymbol['value']['parts']);
 				$preLastPart = \array_pop($nodeSymbol['value']['parts']);
 				if (($prefix === null) && (isset($this->symbolsToImport[$preLastPart]))) {
-					$prefix = $this->symbolsToImport[$preLastPart];
+					$prefix = $this->symbolsToImport[$preLastPart]['prefix'];
+					$preLastPart = $this->symbolsToImport[$preLastPart]['symbol'];
+				} else
+				if (($prefix === null) && $defaultToLocalPrefix) {
+					$prefix = $this->privatePrefix;
 				}
 				$lastPartWord = \str_replace('*', '', $lastPart);
 				$lastPart = \str_replace($lastPartWord, \ucfirst($lastPartWord), $lastPart);
 				\array_push($nodeSymbol['value']['parts'], \str_replace('*', $preLastPart, $lastPart));
 			} else {
 				if (($prefix === null) && (isset($this->symbolsToImport[$nodeSymbol['value']['parts'][0]]))) {
-					$prefix = $this->symbolsToImport[$nodeSymbol['value']['parts'][0]];
+					$prefix = $this->symbolsToImport[$nodeSymbol['value']['parts'][0]]['prefix'];
+					$nodeSymbol['value']['parts'][\count($nodeSymbol['value']['parts']) - 1] = $this->symbolsToImport[$nodeSymbol['value']['parts'][0]]['symbol'];
+				} else
+				if (($prefix === null) && $defaultToLocalPrefix) {
+					$prefix = $this->privatePrefix;
 				}
 			}
 			$result = \implode('__', $nodeSymbol['value']['parts']);
 			if ($prefix !== null) {
-				$result = $prefix . '__' . $result;
+				$result = $prefix . $result;
 			}
 		}
 		if ($nodeSymbol['value']['interface'] !== null) {
@@ -117,7 +172,9 @@ class Transpiler {
 					if (\substr($nodeSymbol['value']['interface'], 0, 1) === '%') {
 						$varType = \substr($nodeSymbol['value']['interface'], 1);
 						if (isset($this->symbolsToImport[$varType])) {
-							$varType = $this->symbolsToImport[$varType] . '__' . $varType;
+							$varType = $this->symbolsToImport[$varType]['prefix'] . $this->symbolsToImport[$varType]['symbol'];
+						} else {
+							$varType = $this->privatePrefix . $varType;
 						}
 						$typeMarker = '.' . $varType;
 					}  else {
@@ -140,7 +197,7 @@ class Transpiler {
 					'Function ' . 
 					$this->nodeSymbolToOutIdentifier(
 						$nodeBlock['items'][1], 
-						\in_array($nodeBlock['items'][1]['value']['parts'], $this->symbolsToExport, true) ? 
+						\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? 
 							$this->exportPrefix : 
 							$this->privatePrefix
 					) . 
@@ -151,7 +208,7 @@ class Transpiler {
 			} else 
 			if ($symbol === '@let') {
 				$this->outputProgramParts[] = 
-					"\t" . $this->nodeSymbolToOutIdentifier($nodeBlock['items'][1]) . 
+					"\t" . $this->nodeSymbolToOutIdentifier($nodeBlock['items'][1], null, true) . 
 					' = ' . $this->convertEvaluableBlock($nodeBlock['items'][2]) . "\r\n";
 			} else 
 			if ($symbol === '@ret') {
@@ -186,15 +243,24 @@ class Transpiler {
 			if ($nodeEvaluableBlock['value']['parts'][0] === '%null') {
 				return 'Null';
 			} else {
-				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock);
+				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock, null, true);
 			}
 		} else
 		if ($nodeEvaluableBlock['type'] === Parser::T_SYMBOL_QUALIFIED) {
-			return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock);
+			return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock, null, true);
 		} else
 		if ($nodeEvaluableBlock['type'] === Parser::T_BLOCK_PRIMARY) {
-			return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock['items'][0]) . 
-				'(' . \implode(', ', \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeEvaluableBlock['items'], 1))) . ')';
+			$operands = \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeEvaluableBlock['items'], 1));
+			$operatorSymbol = $nodeEvaluableBlock['items'][0]['value']['parts'][0];
+			if (\in_array($operatorSymbol, $this->operators, true)) {
+				if (\count($operands) === 1) {
+					\array_unshift($operands, '');
+				}
+				return '(' . \implode(' ' . $operatorSymbol . ' ', $operands) . ')';
+			} else {
+				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock['items'][0], null, true) . 
+					'(' . \implode(', ', $operands) . ')';
+			}
 		}
 	}
 	
@@ -209,13 +275,15 @@ class Transpiler {
 	}
 	
 	private function handleModuleDirective($nodeSymbolModuleName, $nodeSymbolModuleExports) {
-		$this->exportPrefix = $this->nodeSymbolToOutIdentifier($nodeSymbolModuleName, null);
-		$this->privatePrefix = 'local__'. \substr(\uniqid('', true), 15);
+		$this->exportPrefix = $this->nodeSymbolToOutIdentifier($nodeSymbolModuleName, null) . '__';
+		$this->privatePrefix = 'local__'. \substr(\md5($this->exportPrefix), 25) . '__';
 		foreach ($nodeSymbolModuleExports['items'] as $nodeSymbolExported) {
-			$this->symbolsToExport[] = $nodeSymbolExported['value']['parts'];
+			$symbolToExportString = $nodeSymbolExported['value']['parts'][0];
+			$this->symbolsToExport[] = $symbolToExportString;
+			$this->symbolsToImport[\ucfirst($symbolToExportString)] = ['prefix' => $this->exportPrefix, 'symbol' => $symbolToExportString];
 		}
 		
-		$this->outputProgramParts[] = '; module prefix definition: ' . $this->exportPrefix . "\r\n\r\n";;
+		$this->outputProgramParts[] = '; module: ' . \implode('.', $nodeSymbolModuleName['value']['parts']) . "\r\n\r\n";
 	}
 	
 	private function generateOutput() {
