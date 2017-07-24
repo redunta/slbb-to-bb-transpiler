@@ -35,35 +35,41 @@ The pattern is `(@if <cond0> (<actions0>...) <cond1> (<actions1>...) ... @else <
 
 
 ```lisp
-(@module application.launcher (run check))
+(module application.launcher (run check))
 
-(@use some.other.feature.Foo)
+(use (Direct Buffer Cube Entity Camera graphics3D getKey print))
 
-(@func run::@void (
+(function run ::void (
 	(graphics3D 1024 768)
 	(Buffer.set* (Buffer.back*))
 	
-	(@let $myvar::%Foo 10)
-	
-	(Foo $myvar)
-	
 	(check)
 	
-	(@let $a (aux "some"))
+	(let $a (aux "some" 20))
 	
-	(@let $cube::@ref (Cube.create* "hi" 2.5 $myvar))
+	(if (> 5 3) (
+		(let $mystr ::str "Greater")
+		(print $mystr)
+	) 
+	$b () 
+	else (
+		(let $flags ::bool @false)
+	))
+	(
+	(let $cube ::ref (Cube.create*))
 	(Entity.turn* $cube 0.1 0.1 0.2)
 	
-	(@let $camera::@ref (Camera.create*))
+	(let $camera ::ref (Camera.create*))
 	(Camera.*zoom $camera (getKey))
 ))
 
-(@func aux::@int $who::@str $count::@int (
-	(@ret (Sum $who $count))
+(function aux ::int $who ::str $count ::int (
+	(let $a (- $count))
+	(return (+ $who $count))
 ))
 
-(@func check::@bool (
-	(@ret @true)
+(function check ::bool (
+	(return true)
 ))
 ```
 
