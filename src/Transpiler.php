@@ -29,8 +29,8 @@ class Transpiler {
 			'-' => '-', 
 			'*' => '*', 
 			'/' => '/',
-			'@mod' => 'Mod',
-			'@pwr' => '^',
+			'mod' => 'Mod',
+			'pwr' => '^',
 			'~' => '~',
 			'>' => '>',
 			'<' => '<',
@@ -48,19 +48,20 @@ class Transpiler {
 			'^' => 'Xor',
 			'<<' => 'Shl',
 			'>>' => 'Shr',
-			'@sar' => 'Sar',
-			'@int' => 'Int',
-			'@float' => 'Float',
-			'@str' => 'Str',
-			'@tnew' => 'New',
-			'@tfirst' => 'First',
-			'@tlast' => 'Last',
-			'@tbefore' => 'Before',
-			'@tafter' => 'After'
+			'sar' => 'Sar',
+			'int' => 'Int',
+			'float' => 'Float',
+			'str' => 'Str',
+			'tnew' => 'New',
+			'tfirst' => 'First',
+			'tlast' => 'Last',
+			'tbefore' => 'Before',
+			'tafter' => 'After'
+			// ! добавить всякие +1, -1, ? (тернарный иф)
 		];
 		
 		$this->statementOperatorHandlers = [
-			'@module' => function($blockItem) {
+			'module' => function($blockItem) {
 				$nodeSymbolModuleName = $blockItem['items'][1];
 				$nodeSymbolModuleExports = $blockItem['items'][2];
 				$this->exportPrefix = $this->nodeSymbolToOutIdentifier($nodeSymbolModuleName, null) . '__';
@@ -72,7 +73,7 @@ class Transpiler {
 				}
 				$this->commitOutputLine('; module: ' . \implode('.', $nodeSymbolModuleName['value']['parts']) . self::STR_EOL);
 			},
-			'@use' => function($blockItem) {
+			'use' => function($blockItem) {
 				$handleItem = function(&$blockItem) {
 					$part1 = $blockItem['items'][1];
 					$part2 = isset($blockItem['items'][2]) ? $blockItem['items'][2] : null;
@@ -93,7 +94,7 @@ class Transpiler {
 					$handleItem($blockItem);
 				}
 			},
-			'@func' => function($nodeBlock) {
+			'function' => function($nodeBlock) {
 				$this->commitOutputLine(
 					'Function ' . 
 					$this->nodeSymbolToOutIdentifier(
@@ -104,19 +105,19 @@ class Transpiler {
 				$this->handleCallListBlock($nodeBlock['items'][\count($nodeBlock['items']) - 1]);
 				$this->commitOutputLine('End Function' . self::STR_EOL);
 			},
-			'@ret' => function($nodeBlock) {
+			'return' => function($nodeBlock) {
 				$this->commitOutputLine('Return '  . $this->convertEvaluableBlock($nodeBlock['items'][1]));
 			},
-			'@let' => function($nodeBlock) {
+			'let' => function($nodeBlock) {
 				$this->commitOutputLine(
 					$this->nodeSymbolToOutIdentifier($nodeBlock['items'][1], null, true) . 
 					' = ' . $this->convertEvaluableBlock($nodeBlock['items'][2]));
 			},
-			'@if' => function($nodeBlock) {
+			'if' => function($nodeBlock) {
 				for ($iNode = 1; $iNode < \count($nodeBlock['items']); $iNode = $iNode + 2) {
 					$condPart = $nodeBlock['items'][$iNode];
 					$execPart = $nodeBlock['items'][$iNode + 1];
-					if (($condPart['type'] === Parser::T_SYMBOL_SIMPLE) && ($condPart['value']['parts'][0] === '@else')) {
+					if (($condPart['type'] === Parser::T_SYMBOL_SIMPLE) && ($condPart['value']['parts'][0] === 'else')) {
 						$this->commitOutputLine('Else');
 					} else {
 						$this->commitOutputLine(($iNode === 1 ? 'If' : 'Else If') . ' ' . $this->convertEvaluableBlock($condPart) . ' Then');
@@ -172,13 +173,13 @@ class Transpiler {
 		} else
 		if ($nodeEvaluableBlock['type'] === Parser::T_SYMBOL_SIMPLE) {
 			$symbol = $nodeEvaluableBlock['value']['parts'][0];
-			if ($symbol === '@true') {
+			if ($symbol === 'true') {
 				return 'True';
 			} else
-			if ($symbol === '@false') {
+			if ($symbol === 'false') {
 				return 'False';
 			} else
-			if ($symbol === '@null') {
+			if ($symbol === 'null') {
 				return '0';
 			} else
 			if ($symbol === '%null') {
@@ -245,22 +246,22 @@ class Transpiler {
 		if ($nodeSymbol['value']['interface'] !== null) {
 			$typeMarker = '';
 			switch ($nodeSymbol['value']['interface']) {
-				case '@int': 
+				case 'int': 
 					$typeMarker = '%';
 					break;
-				case '@bool': 
+				case 'bool': 
 					$typeMarker = '%';
 					break;
-				case '@float':
+				case 'float':
 					$typeMarker = '#';
 					break;
-				case '@str': 
+				case 'str': 
 					$typeMarker = '$';
 					break;
-				case '@ref':
+				case 'ref':
 					$typeMarker = '%';
 					break;
-				case '@void':
+				case 'void':
 					$typeMarker = '%';
 					break;
 				default: 
