@@ -55,7 +55,7 @@ The pattern is `(if <cond0> (<actions0>...) <cond1> (<actions1>...) ... else <co
 	else (
 		(let $flags ::bool false)
 	))
-	(
+	
 	(let $cube ::ref (Cube.create*))
 	(Entity.turn* $cube 0.1 0.1 0.2)
 	
