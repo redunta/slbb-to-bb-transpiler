@@ -27,6 +27,11 @@ Variable `$varname` declared having `@int` type and assigned value of the expres
 Basic primitive types are `@int` (integer), `@str` (string), `@float` (really b3d single float), `@bool` (really integer),
 `@ptr` (for handles, also integer).
 
+- Conditional execution:
+```lisp
+(@if (> $a $b) ((print "$a is greater than $b")) (< $x $y) ((print "...")) @else (#|...|#))
+```
+The pattern is `(@if <cond0> (<actions0>...) <cond1> (<actions1>...) ... @else <condE> (<actionsE>...))`
 
 
 ```lisp
