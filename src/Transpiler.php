@@ -4,6 +4,8 @@ namespace SLBBTools;
 
 class Transpiler {
 	
+	const STR_EOL = "\r\n";
+	
 	private $ast;
 	private $exportPrefix;
 	private $privatePrefix;
@@ -11,6 +13,8 @@ class Transpiler {
 	private $symbolsToImport; // alias => full name without last part
 	private $outputProgramParts;
 	private $operators;
+	private $statementOperatorHandlers;
+	private $curBlockLevel;
 	
 	public function __construct($ast) {
 		$this->ast = $ast;
@@ -19,6 +23,7 @@ class Transpiler {
 		$this->symbolsToExport = [];
 		$this->symbolsToImport = [];
 		$this->outputProgramParts = [];
+		$this->curBlockLevel = -1;
 		$this->operators = [
 			'+' => '+', 
 			'-' => '-', 
@@ -53,59 +58,149 @@ class Transpiler {
 			'@tbefore' => 'Before',
 			'@tafter' => 'After'
 		];
+		
+		$this->statementOperatorHandlers = [
+			'@module' => function($blockItem) {
+				$nodeSymbolModuleName = $blockItem['items'][1];
+				$nodeSymbolModuleExports = $blockItem['items'][2];
+				$this->exportPrefix = $this->nodeSymbolToOutIdentifier($nodeSymbolModuleName, null) . '__';
+				$this->privatePrefix = 'local__'. \substr(\md5($this->exportPrefix), 25) . '__';
+				foreach ($nodeSymbolModuleExports['items'] as $nodeSymbolExported) {
+					$symbolToExportString = $nodeSymbolExported['value']['parts'][0];
+					$this->symbolsToExport[] = $symbolToExportString;
+					$this->symbolsToImport[\ucfirst($symbolToExportString)] = ['prefix' => $this->exportPrefix, 'symbol' => $symbolToExportString];
+				}
+				$this->commitOutputLine('; module: ' . \implode('.', $nodeSymbolModuleName['value']['parts']) . self::STR_EOL);
+			},
+			'@use' => function($blockItem) {
+				$handleItem = function(&$blockItem) {
+					$part1 = $blockItem['items'][1];
+					$part2 = isset($blockItem['items'][2]) ? $blockItem['items'][2] : null;
+					$alias = $part2 !== null ? 
+						$part2['value']['parts'][0]:
+						$part1['value']['parts'][\count($part1['value']['parts']) - 1];
+					$lastPartValue = \array_pop($part1['value']['parts']);
+					$fullName = $this->nodeSymbolToOutIdentifier($part1, null);
+					$this->symbolsToImport[\ucfirst($alias)] = [ 'prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst($lastPartValue)];
+				};
+				if ($blockItem['items'][1]['type'] === Parser::T_BLOCK_PRIMARY) {
+					foreach ($blockItem['items'][1]['items'] as $nodeSymbolImported) {
+						$handleItem(new \ArrayObject([
+							'items' => [null, $nodeSymbolImported]
+						]));
+					}
+				} else {
+					$handleItem($blockItem);
+				}
+			},
+			'@func' => function($nodeBlock) {
+				$this->commitOutputLine(
+					'Function ' . 
+					$this->nodeSymbolToOutIdentifier(
+						$nodeBlock['items'][1], 
+						\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix
+					) . 
+					'(' . \implode(', ', \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeBlock['items'], 2, -1))) . ')');
+				$this->handleCallListBlock($nodeBlock['items'][\count($nodeBlock['items']) - 1]);
+				$this->commitOutputLine('End Function' . self::STR_EOL);
+			},
+			'@ret' => function($nodeBlock) {
+				$this->commitOutputLine('Return '  . $this->convertEvaluableBlock($nodeBlock['items'][1]));
+			},
+			'@let' => function($nodeBlock) {
+				$this->commitOutputLine(
+					$this->nodeSymbolToOutIdentifier($nodeBlock['items'][1], null, true) . 
+					' = ' . $this->convertEvaluableBlock($nodeBlock['items'][2]));
+			},
+			'@if' => function($nodeBlock) {
+				for ($iNode = 1; $iNode < \count($nodeBlock['items']); $iNode = $iNode + 2) {
+					$condPart = $nodeBlock['items'][$iNode];
+					$execPart = $nodeBlock['items'][$iNode + 1];
+					if (($condPart['type'] === Parser::T_SYMBOL_SIMPLE) && ($condPart['value']['parts'][0] === '@else')) {
+						$this->commitOutputLine('Else');
+					} else {
+						$this->commitOutputLine(($iNode === 1 ? 'If' : 'Else If') . ' ' . $this->convertEvaluableBlock($condPart) . ' Then');
+					}
+					$this->handleCallListBlock($execPart);
+				}
+				$this->commitOutputLine('End If');
+			},
+			'@@__callProc' => function($nodeBlock) {
+				$this->commitOutputLine($this->convertEvaluableBlock($nodeBlock));
+			}
+		];
 	}
 	
 	public function run() {
-		$this->handleBlock($this->ast);
-		return $this->generateOutput();
+		$this->handleCallListBlock($this->ast);
+		return \implode('', $this->outputProgramParts);
 	}
 	
-	private function handleBlock($nodeBlock) {
-		switch ($nodeBlock['type']) {
-			case Parser::T_BLOCK_ROOT:
-				return $this->handleRootBlock($nodeBlock);
-				break;
-			case Parser::T_BLOCK_PRIMARY:
-				return $this->handlePrimaryBlock($nodeBlock);
-				break;
-			case Parser::T_BLOCK_INDEX:
-				return $this->handleIndexBlock($nodeBlock);
-				break;
-			default: 
-				throw new \Exception('wrong node type at block handle level');
-				break;
+	private function handleStatementPrimaryBlock($nodeBlock) {
+		if (($nodeBlock['items'][0]['type'] !== Parser::T_SYMBOL_SIMPLE) && ($nodeBlock['items'][0]['type'] !== Parser::T_SYMBOL_QUALIFIED)) {
+			throw new \Exception('Evaluable functions or operators are not supported.');
 		}
+		$symbol = $nodeBlock['items'][0]['value']['parts'][0];
+		$handlers = $this->statementOperatorHandlers;
+		if (! isset($handlers[$symbol])) {
+			$symbol = '@@__callProc';
+		}
+		$handlers[$symbol]($nodeBlock);
 	}
 	
-	private function handleRootBlock($nodeBlock) {
-		foreach ($nodeBlock['items'] as $blockItem) {
-			if ($blockItem['type'] === Parser::T_BLOCK_PRIMARY) {
-				if ($blockItem['items'][0]['value']['parts'][0] === '@module') {
-					$this->handleModuleDirective($blockItem['items'][1], $blockItem['items'][2]);
-				} else
-				if ($blockItem['items'][0]['value']['parts'][0] === '@use') {
-					$handleItem = function(&$blockItem) {
-						$alias = isset($blockItem['items'][2]) ? 
-							$blockItem['items'][2]['value']['parts'][0]:
-							$blockItem['items'][1]['value']['parts'][\count($blockItem['items'][1]['value']['parts']) - 1];
-						$lastPartValue = \array_pop($blockItem['items'][1]['value']['parts']);
-						$fullName = $this->nodeSymbolToOutIdentifier($blockItem['items'][1], null);
-						$this->symbolsToImport[\ucfirst($alias)] = [ 'prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst($lastPartValue)];
-					};
-					if ($blockItem['items'][1]['type'] === Parser::T_BLOCK_PRIMARY) {
-						foreach ($blockItem['items'][1]['items'] as $nodeSymbolImported) {
-							$handleItem(new \ArrayObject([
-								'items' => [null, $nodeSymbolImported]
-							]));
-						}
-					} else {
-						$handleItem($blockItem);
-					}
-				} else {
-					$this->handlePrimaryBlock($blockItem);
-				}
+	private function handleIndexBlock($nodeBlock) {
+		
+	}
+	
+	private function handleCallListBlock($nodeCallListBlock) {
+		$this->curBlockLevel ++;
+		foreach ($nodeCallListBlock['items'] as $curNodeBlock) {
+			$this->handleStatementPrimaryBlock($curNodeBlock);
+		}
+		$this->curBlockLevel --;
+	}
+	
+	private function convertEvaluableBlock($nodeEvaluableBlock) {
+		if ($nodeEvaluableBlock['type'] === Parser::T_STRING) {
+			return '"' . \str_replace('"', '" + Chr(34) + "', $nodeEvaluableBlock['value']) . '"';
+		} else
+		if ($nodeEvaluableBlock['type'] === Parser::T_NUMBER_INTEGER) {
+			return $nodeEvaluableBlock['value'];
+		} else
+		if ($nodeEvaluableBlock['type'] === Parser::T_NUMBER_FLOAT) {
+			return $nodeEvaluableBlock['value'];
+		} else
+		if ($nodeEvaluableBlock['type'] === Parser::T_SYMBOL_SIMPLE) {
+			$symbol = $nodeEvaluableBlock['value']['parts'][0];
+			if ($symbol === '@true') {
+				return 'True';
+			} else
+			if ($symbol === '@false') {
+				return 'False';
+			} else
+			if ($symbol === '@null') {
+				return '0';
+			} else
+			if ($symbol === '%null') {
+				return 'Null';
 			} else {
-				throw new \Exception('Only primary blocks allowed at root level.');
+				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock, null, true);
+			}
+		} else
+		if ($nodeEvaluableBlock['type'] === Parser::T_SYMBOL_QUALIFIED) {
+			return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock, null, true);
+		} else
+		if ($nodeEvaluableBlock['type'] === Parser::T_BLOCK_PRIMARY) {
+			$operands = \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeEvaluableBlock['items'], 1));
+			$operatorSymbol = $nodeEvaluableBlock['items'][0]['value']['parts'][0];
+			if (\in_array($operatorSymbol, $this->operators, true)) {
+				if (\count($operands) === 1) {
+					\array_unshift($operands, '');
+				}
+				return '(' . \implode(' ' . $operatorSymbol . ' ', $operands) . ')';
+			} else {
+				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock['items'][0], null, true) . 
+					'(' . \implode(', ', $operands) . ')';
 			}
 		}
 	}
@@ -187,107 +282,7 @@ class Transpiler {
 		return $result;
 	}
 	
-	private function handlePrimaryBlock($nodeBlock) {
-		if (($nodeBlock['items'][0]['type'] === Parser::T_SYMBOL_SIMPLE) || 
-			($nodeBlock['items'][0]['type'] === Parser::T_SYMBOL_QUALIFIED)) {
-			
-			$symbol = $nodeBlock['items'][0]['value']['parts'][0];
-			if ($symbol === '@func') {
-				$this->outputProgramParts[] = 
-					'Function ' . 
-					$this->nodeSymbolToOutIdentifier(
-						$nodeBlock['items'][1], 
-						\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? 
-							$this->exportPrefix : 
-							$this->privatePrefix
-					) . 
-					'(' . \implode(', ', \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeBlock['items'], 2, -1))) . ')' .
-					"\r\n";
-				$this->handleCallListBlock($nodeBlock['items'][\count($nodeBlock['items']) - 1]);
-				$this->outputProgramParts[] = 'End Function' . "\r\n\r\n";
-			} else 
-			if ($symbol === '@let') {
-				$this->outputProgramParts[] = 
-					"\t" . $this->nodeSymbolToOutIdentifier($nodeBlock['items'][1], null, true) . 
-					' = ' . $this->convertEvaluableBlock($nodeBlock['items'][2]) . "\r\n";
-			} else 
-			if ($symbol === '@ret') {
-				$this->outputProgramParts[] = 
-					"\tReturn "  . $this->convertEvaluableBlock($nodeBlock['items'][1]) . "\r\n";
-			} else {
-				$this->outputProgramParts[] = "\t" . $this->convertEvaluableBlock($nodeBlock) . "\r\n";
-			}
-		}
+	private function commitOutputLine($outputLine) {
+		$this->outputProgramParts[] = \str_repeat("\t", $this->curBlockLevel) . $outputLine . self::STR_EOL; 
 	}
-	
-	private function convertEvaluableBlock($nodeEvaluableBlock) {
-		if ($nodeEvaluableBlock['type'] === Parser::T_STRING) {
-			return '"' . \str_replace('"', '" + Chr(34) + "', $nodeEvaluableBlock['value']) . '"';
-		} else
-		if ($nodeEvaluableBlock['type'] === Parser::T_NUMBER_INTEGER) {
-			return $nodeEvaluableBlock['value'];
-		} else
-		if ($nodeEvaluableBlock['type'] === Parser::T_NUMBER_FLOAT) {
-			return $nodeEvaluableBlock['value'];
-		} else
-		if ($nodeEvaluableBlock['type'] === Parser::T_SYMBOL_SIMPLE) {
-			if ($nodeEvaluableBlock['value']['parts'][0] === '@true') {
-				return 'True';
-			} else
-			if ($nodeEvaluableBlock['value']['parts'][0] === '@false') {
-				return 'False';
-			} else
-			if ($nodeEvaluableBlock['value']['parts'][0] === '@null') {
-				return '0';
-			} else
-			if ($nodeEvaluableBlock['value']['parts'][0] === '%null') {
-				return 'Null';
-			} else {
-				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock, null, true);
-			}
-		} else
-		if ($nodeEvaluableBlock['type'] === Parser::T_SYMBOL_QUALIFIED) {
-			return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock, null, true);
-		} else
-		if ($nodeEvaluableBlock['type'] === Parser::T_BLOCK_PRIMARY) {
-			$operands = \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeEvaluableBlock['items'], 1));
-			$operatorSymbol = $nodeEvaluableBlock['items'][0]['value']['parts'][0];
-			if (\in_array($operatorSymbol, $this->operators, true)) {
-				if (\count($operands) === 1) {
-					\array_unshift($operands, '');
-				}
-				return '(' . \implode(' ' . $operatorSymbol . ' ', $operands) . ')';
-			} else {
-				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock['items'][0], null, true) . 
-					'(' . \implode(', ', $operands) . ')';
-			}
-		}
-	}
-	
-	private function handleCallListBlock($nodeCallListBlock) {
-		foreach ($nodeCallListBlock['items'] as $curNodeBlock) {
-			$this->handlePrimaryBlock($curNodeBlock);
-		}
-	}
-	
-	private function handleIndexBlock($nodeBlock) {
-		
-	}
-	
-	private function handleModuleDirective($nodeSymbolModuleName, $nodeSymbolModuleExports) {
-		$this->exportPrefix = $this->nodeSymbolToOutIdentifier($nodeSymbolModuleName, null) . '__';
-		$this->privatePrefix = 'local__'. \substr(\md5($this->exportPrefix), 25) . '__';
-		foreach ($nodeSymbolModuleExports['items'] as $nodeSymbolExported) {
-			$symbolToExportString = $nodeSymbolExported['value']['parts'][0];
-			$this->symbolsToExport[] = $symbolToExportString;
-			$this->symbolsToImport[\ucfirst($symbolToExportString)] = ['prefix' => $this->exportPrefix, 'symbol' => $symbolToExportString];
-		}
-		
-		$this->outputProgramParts[] = '; module: ' . \implode('.', $nodeSymbolModuleName['value']['parts']) . "\r\n\r\n";
-	}
-	
-	private function generateOutput() {
-		return \implode('', $this->outputProgramParts);
-	}
-	
 }
