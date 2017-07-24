@@ -7,31 +7,31 @@ Instead of directly using Blitz3D Basic dialect this transpiler allows you to wr
 ## Syntax, shortly
 - Module declaration, must be the topmost expression:
 ```lisp
-(@module my.useful.module (exportedA exportedB exportedC))
+(module my.useful.module (exportedA exportedB exportedC))
 ```
 Here a module named `my.useful.module` is declared along with symbols (`exportedA`, `exportedB`, `exportedC`) that are exported from it. Functions and Types can be exported only.
 
 - Import declarations followed by module declaration have the form:
 ```lisp
-(@use required.module.Action)
-(@use required.module.Action ActionAlias)
+(use required.module.Action)
+(use required.module.Action ActionAlias)
 ```
 By default imported symbol is available by last part of the full path,
 but if an alias provided then it will be used instead.
 
 - Variable declaration and/or assignment:
 ```lisp
-(@let $varname::@int (+ 3 5))
+(let $varname ::int (+ 3 5))
 ```
-Variable `$varname` declared having `@int` type and assigned value of the expression.
-Basic primitive types are `@int` (integer), `@str` (string), `@float` (really b3d single float), `@bool` (really integer),
-`@ptr` (for handles, also integer).
+Variable `$varname` declared having `int` type and assigned value of the expression.
+Basic primitive types are `int` (integer), `str` (string), `float` (really b3d single float), `bool` (really integer),
+`ptr` (for handles, also integer).
 
 - Conditional execution:
 ```lisp
-(@if (> $a $b) ((print "$a is greater than $b")) (< $x $y) ((print "...")) @else (#|...|#))
+(if (> $a $b) ((print "$a is greater than $b")) (< $x $y) ((print "...")) else (#|...|#))
 ```
-The pattern is `(@if <cond0> (<actions0>...) <cond1> (<actions1>...) ... @else <condE> (<actionsE>...))`
+The pattern is `(if <cond0> (<actions0>...) <cond1> (<actions1>...) ... else <condE> (<actionsE>...))`
 
 
 ```lisp
