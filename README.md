@@ -16,7 +16,7 @@ Here a module named `my.useful.module` is declared along with symbols (`exported
 (use required.module.Action)
 (use required.module.Action ActionAlias)
 ```
-By default imported symbol is available by last part of the full path,
+By default imported symbol is available by the last part of the full path,
 but if an alias provided then it will be used instead.
 
 - Variable declaration and/or assignment:
@@ -53,7 +53,7 @@ The pattern is `(if <cond0> (<actions0>...) <cond1> (<actions1>...) ... else <co
 	) 
 	$b () 
 	else (
-		(let $flags ::bool @false)
+		(let $flags ::bool false)
 	))
 	(
 	(let $cube ::ref (Cube.create*))
