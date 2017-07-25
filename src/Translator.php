@@ -6,6 +6,8 @@ class Translator {
 	
 	const STR_EOL = "\r\n";
 	
+	private $includedModules;
+	private $justIncludedModulesOutput;
 	private $ast;
 	private $exportPrefix;
 	private $privatePrefix;
@@ -16,7 +18,12 @@ class Translator {
 	private $statementOperatorHandlers;
 	private $curBlockLevel;
 	
-	public function __construct($ast) {
+	public function __construct($ast, &$includedModules = null) {
+		$this->includedModules = &$includedModules;
+		if ($this->includedModules === null) {
+			$this->includedModules = [];
+		}
+		$this->justIncludedModulesOutput = [];
 		$this->ast = $ast;
 		$this->exportPrefix = '';
 		$this->privatePrefix = '';
@@ -76,6 +83,11 @@ class Translator {
 			'\'use' => function($blockItem) {
 				$handleItem = function(&$blockItem) {
 					$part1 = $blockItem['items'][1];
+					$moduleName = \implode('.', \array_slice($part1['value']['parts'], 0, -1));
+					if (($moduleName !== '') && (! \in_array($moduleName, $this->includedModules, true))) {
+						$this->includedModules[] = $moduleName;
+						$this->justIncludedModulesOutput[] = (new Transpiler($moduleName, $this->includedModules))->run();
+					}
 					$part2 = isset($blockItem['items'][2]) ? $blockItem['items'][2] : null;
 					$alias = $part2 !== null ? 
 						$part2['value']['parts'][0]:
@@ -158,7 +170,7 @@ class Translator {
 	
 	public function run() {
 		$this->handleCallListBlock($this->ast);
-		return \implode('', $this->outputProgramParts);
+		return \implode('', \array_merge($this->justIncludedModulesOutput, $this->outputProgramParts));
 	}
 	
 	private function handleStatementPrimaryBlock($nodeBlock) {
@@ -234,6 +246,7 @@ class Translator {
 		$result = null;
 		foreach ($nodeSymbol['value']['parts'] as &$curPart) {
 			$curPart = \ucfirst($curPart);
+			$curPart = \str_replace('-', '_', $curPart);
 		}
 		$firstChar = \substr($nodeSymbol['value']['parts'][0], 0, 1);
 		if (($firstChar === '\'') || ($firstChar === '$')) {
