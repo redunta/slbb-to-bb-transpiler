@@ -21,7 +21,7 @@ but if an alias provided then it will be used instead.
 
 - Variable declaration and/or assignment:
 ```lisp
-(let $varname ::int (+ 3 5))
+(set $varname ::int (+ 3 5))
 ```
 Variable `$varname` declared having `int` type and assigned value of the expression.
 Basic primitive types are `int` (integer), `str` (string), `float` (really b3d single float), `bool` (really integer),
@@ -35,6 +35,10 @@ The pattern is `(if <cond0> (<actions0>...) <cond1> (<actions1>...) ... else <co
 
 
 ```lisp
+#|
+	Exapmle program shown here just to demonstrate the syntax
+|#
+
 (module application.launcher (run check))
 
 (use (Direct Buffer Cube Entity Camera graphics3D getKey print))
@@ -45,31 +49,44 @@ The pattern is `(if <cond0> (<actions0>...) <cond1> (<actions1>...) ... else <co
 	
 	(check)
 	
-	(let $a (aux "some" 20))
+	(set $a (aux "some" 20))
 	
 	(if (> 5 3) (
-		(let $mystr ::str "Greater")
+		(set $mystr ::str "Greater")
 		(print $mystr)
 	) 
 	$b () 
 	else (
-		(let $flags ::bool false)
+		(set $flags ::bool false)
 	))
 	
-	(let $cube ::ref (Cube.create*))
+	(set $counter ::int 10)
+	(while (> $counter 0) (
+		(set $counter (- $counter 1))
+		(if (> 10 20) (
+			(break)
+		))
+	))
+	
+	(forstep $counter ::int 0 20 1 (
+		(print $counter)
+	))
+	
+	(set $cube ::ref (Cube.create*))
 	(Entity.turn* $cube 0.1 0.1 0.2)
 	
-	(let $camera ::ref (Camera.create*))
+	(set $camera ::ref (Camera.create*))
 	(Camera.*zoom $camera (getKey))
 ))
 
 (function aux ::int $who ::str $count ::int (
-	(let $a (- $count))
+	(set $a (- $count))
 	(return (+ $who $count))
 ))
 
 (function check ::bool (
 	(return true)
 ))
+
 ```
 
