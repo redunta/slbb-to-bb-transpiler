@@ -1,0 +1,8 @@
+
+('module test-mod.here (CustomFunc))
+
+('use (print))
+
+('function CustomFunc ::void (
+	(print "I am custom function from another module.")
+))

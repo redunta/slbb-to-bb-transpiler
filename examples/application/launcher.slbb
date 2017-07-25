@@ -1,0 +1,54 @@
+#|
+	Example program shown here just to demonstrate the syntax
+|#
+
+('module application.launcher (run check))
+
+('use test-mod.here.CustomFunc)
+('use (Direct Buffer Cube Entity Camera graphics3D getKey print))
+
+('function run ::void (
+	(graphics3D 1024 768)
+	(Buffer.set* (Buffer.back*))
+	
+	(CustomFunc)
+	(check)
+	
+	('set $a (aux "some" 20))
+	
+	('if (> 5 3) (
+		('set $mystr ::str "Greater")
+		(print $mystr)
+	) 
+	$b () 
+	'else (
+		('set $flags ::bool 'false)
+	))
+	
+	('set $counter ::int 10)
+	('while (> $counter 0) (
+		('set $counter (- $counter 1))
+		('if (> 10 20) (
+			('break)
+		))
+	))
+	
+	('forstep $counter ::int 0 20 1 (
+		(print $counter)
+	))
+	
+	('set $cube ::ref (Cube.create*))
+	(Entity.turn* $cube 0.1 0.1 0.2)
+	
+	('set $camera ::ref (Camera.create*))
+	(Camera.*zoom $camera (getKey))
+))
+
+('function aux ::int $who ::str $count ::int (
+	('set $a (- $count))
+	('return (+ $who $count))
+))
+
+('function check ::bool (
+	('return 'true)
+))
