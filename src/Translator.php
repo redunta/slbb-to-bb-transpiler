@@ -13,6 +13,7 @@ class Translator {
 	private $privatePrefix;
 	private $symbolsToExport; // ...['values']['parts'] only (not the whole node)
 	private $symbolsToImport; // alias => full name without last part
+	private $symbolsToImportMethodLocation;
 	private $outputProgramParts;
 	private $operators;
 	private $statementOperatorHandlers;
@@ -29,6 +30,7 @@ class Translator {
 		$this->privatePrefix = '';
 		$this->symbolsToExport = [];
 		$this->symbolsToImport = [];
+		$this->symbolsToImportMethodLocation = [];
 		$this->outputProgramParts = [];
 		$this->curBlockLevel = -1;
 		$this->operators = [
@@ -89,12 +91,22 @@ class Translator {
 						$this->justIncludedModulesOutput[] = (new Transpiler($moduleName, $this->includedModules))->run();
 					}
 					$part2 = isset($blockItem['items'][2]) ? $blockItem['items'][2] : null;
-					$alias = $part2 !== null ? 
+					$alias = \ucfirst(\str_replace('&', '', $part2 !== null ? 
 						$part2['value']['parts'][0]:
-						$part1['value']['parts'][\count($part1['value']['parts']) - 1];
+						$part1['value']['parts'][\count($part1['value']['parts']) - 1]));
 					$lastPartValue = \array_pop($part1['value']['parts']);
+					$ampPos = \strpos($lastPartValue, '&');
+					if ($ampPos === false) {
+						$methodLocation = null;
+					} else
+					if ($ampPos === 0) {
+						$methodLocation = 'postfix';
+					} else {
+						$methodLocation = 'prefix';
+					}
 					$fullName = $this->nodeSymbolToOutIdentifier($part1, null);
-					$this->symbolsToImport[\ucfirst($alias)] = [ 'prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst($lastPartValue)];
+					$this->symbolsToImport[$alias] = [ 'prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst(\str_replace('&', '', $lastPartValue))];
+					$this->symbolsToImportMethodLocation[$alias] = $methodLocation;
 				};
 				if ($blockItem['items'][1]['type'] === Parser::T_BLOCK_PRIMARY) {
 					foreach ($blockItem['items'][1]['items'] as $nodeSymbolImported) {
@@ -253,7 +265,18 @@ class Translator {
 			$result = \str_replace('$', 'var_', \implode('\\', $nodeSymbol['value']['parts']));
 		} else {
 			$partCount = \count($nodeSymbol['value']['parts']);
-			if (($partCount > 1) && (\strpos($nodeSymbol['value']['parts'][$partCount - 1], '*') !== false)) {
+			if (($prefix === null) && ($partCount > 1) && (isset($this->symbolsToImport[$nodeSymbol['value']['parts'][$partCount - 2]]))) {
+				if (\strpos($nodeSymbol['value']['parts'][$partCount - 1], '&') === false) {
+					$methodLocation = $this->symbolsToImportMethodLocation[$nodeSymbol['value']['parts'][$partCount - 2]];
+					if ($methodLocation === 'prefix') {
+						$nodeSymbol['value']['parts'][$partCount - 1] = '&' . $nodeSymbol['value']['parts'][$partCount - 1];
+					} else
+					if ($methodLocation === 'postfix') {
+						$nodeSymbol['value']['parts'][$partCount - 1] = $nodeSymbol['value']['parts'][$partCount - 1] . '&';
+					}
+				}
+			}
+			if (($partCount > 1) && (\strpos($nodeSymbol['value']['parts'][$partCount - 1], '&') !== false)) {
 				$lastPart = \array_pop($nodeSymbol['value']['parts']);
 				$preLastPart = \array_pop($nodeSymbol['value']['parts']);
 				if (($prefix === null) && (isset($this->symbolsToImport[$preLastPart]))) {
@@ -263,13 +286,13 @@ class Translator {
 				if (($prefix === null) && $defaultToLocalPrefix) {
 					$prefix = $this->privatePrefix;
 				}
-				$lastPartWord = \str_replace('*', '', $lastPart);
+				$lastPartWord = \str_replace('&', '', $lastPart);
 				$lastPart = \str_replace($lastPartWord, \ucfirst($lastPartWord), $lastPart);
-				\array_push($nodeSymbol['value']['parts'], \str_replace('*', $preLastPart, $lastPart));
+				\array_push($nodeSymbol['value']['parts'], \str_replace('&', $preLastPart, $lastPart));
 			} else {
 				if (($prefix === null) && (isset($this->symbolsToImport[$nodeSymbol['value']['parts'][0]]))) {
 					$prefix = $this->symbolsToImport[$nodeSymbol['value']['parts'][0]]['prefix'];
-					$nodeSymbol['value']['parts'][\count($nodeSymbol['value']['parts']) - 1] = $this->symbolsToImport[$nodeSymbol['value']['parts'][0]]['symbol'];
+					$nodeSymbol['value']['parts'][0] = $this->symbolsToImport[$nodeSymbol['value']['parts'][0]]['symbol']; // \count($nodeSymbol['value']['parts']) - 1
 				} else
 				if (($prefix === null) && $defaultToLocalPrefix) {
 					$prefix = $this->privatePrefix;
