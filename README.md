@@ -42,11 +42,12 @@ The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <
 ('module application.launcher (run check))
 
 ('use test-mod.here.CustomFunc)
-('use (Direct Buffer Cube Entity Camera graphics3D getKey print))
+('use &Buffer RawBuffer)
+('use (&Cube &Entity &Camera graphics3D getKey print))
 
 ('function run ::void (
 	(graphics3D 1024 768)
-	(Buffer.set* (Buffer.back*))
+	(RawBuffer.set (RawBuffer.back))
 	
 	(CustomFunc)
 	(check)
@@ -74,11 +75,11 @@ The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <
 		(print $counter)
 	))
 	
-	('set $cube ::ref (Cube.create*))
-	(Entity.turn* $cube 0.1 0.1 0.2)
+	('set $cube ::ref (Cube.create))
+	(Entity.turn $cube 0.1 0.1 0.2)
 	
-	('set $camera ::ref (Camera.create*))
-	(Camera.*zoom $camera (getKey))
+	('set $camera ::ref (Camera.create))
+	(Camera.&zoom $camera (getKey))
 ))
 
 ('function aux ::int $who ::str $count ::int (
