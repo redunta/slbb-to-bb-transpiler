@@ -38,9 +38,6 @@ The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <
 #|
 	Example program shown here just to demonstrate the syntax
 |#
-#|
-	Example program shown here just to demonstrate the syntax
-|#
 
 ('module application.launcher (run check))
 
