@@ -9,7 +9,7 @@ Instead of directly using Blitz3D Basic dialect this transpiler allows you to wr
 ```lisp
 ('module my.useful.module (exportedA exportedB exportedC))
 ```
-Here a module named `my.useful.module` is declared along with symbols (`exportedA`, `exportedB`, `exportedC`) that are exported from it. Functions and Types can be exported only.
+Here a module named `my.useful.module` is declared along with symbols (`exportedA`, `exportedB`, `exportedC`) that are exported from it. Functions, methods, types, constants can be exported.
 
 - Import declarations followed by module declaration have the form:
 ```lisp
@@ -33,6 +33,30 @@ Basic primitive types are `int` (integer), `str` (string), `float` (really b3d s
 ```
 The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <condE> (<actionsE>...))`
 
+- Record type declaration:
+```lisp
+('type Box 
+	width ::int
+	height ::int
+	depth ::int
+)
+```
+
+- Function definition
+```lisp
+('function duplicate ::int $a ::int (
+	('return (* $a 2))
+))
+```
+
+- Method (virtual function prototype) declaration:
+```lisp
+('method ABox.getVolume ::int $box ::ptr)
+```
+Method declaration is similar to how function is defined but has no function body and works as accumulator for possible implementations which are to be selected at runtime (during method call) by the first argument type.
+
+- Function as method implementation.
+After a function body a method can be referenced to make the function one of possible method implementations for given first argument type.
 
 ```lisp
 #|
@@ -42,15 +66,28 @@ The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <
 ('module application.launcher (run check))
 
 ('use test-mod.here.CustomFunc)
+('use test-mod.here.AbstractBox)
+('use test-mod.here.Box)
 ('use &Buffer RawBuffer)
 ('use (&Cube &Entity &Camera graphics3D getKey print))
+
+('const MY_VAR ::int 10)
+
+(run)
 
 ('function run ::void (
 	(graphics3D 1024 768)
 	(RawBuffer.set (RawBuffer.back))
 	
+	(print MY_VAR)
+	
 	(CustomFunc)
 	(check)
+	
+	('set $box ::ptr (Box.create))
+	(AbstractBox.setSize $box 10 20 30)
+	(print (AbstractBox.getVolume $box))
+	(AbstractBox.free $box)
 	
 	('set $a (aux "some" 20))
 	
