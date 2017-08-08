@@ -10,18 +10,18 @@ class Transpiler {
 	
 	private $sourceModuleName;
 	private $includedModules;
+	private $definedMethods;
 	
-	public function __construct($sourceModuleName, &$includedModules = null) {
+	public function __construct($sourceModuleName, &$includedModules = [], &$definedMethods = []) {
 		$this->sourceModuleName = $sourceModuleName;
 		$this->includedModules = &$includedModules;
+		$this->definedMethods = &$definedMethods;
 	}
 	
 	public function run() {
 		$sourcePath = $_SERVER['DOCUMENT_ROOT'] . '/' . \str_replace('.', '/', $this->sourceModuleName) . '.slbb';
-		$lexed = (new Lexer(\file_get_contents($sourcePath)))->run(); // \file_put_contents($sourcePath . '_lexed.json', \json_encode($lexed, \JSON_UNESCAPED_UNICODE));	
-		$parsed = (new Parser($lexed))->run(); // \file_put_contents($sourcePath . '_parsed.json', \json_encode($parsed, \JSON_UNESCAPED_UNICODE | \JSON_PARTIAL_OUTPUT_ON_ERROR));
-		$transpiled = (new Translator($parsed, $this->includedModules))->run(); // \file_put_contents($sourcePath . '_out.bb', $transpiled);
-		return $transpiled;
+		$sourceCode = \file_get_contents($sourcePath);
+		return (new Translator((new Parser((new Lexer($sourceCode))->run()))->run(), $this->includedModules, $this->definedMethods))->run();
 	}
 	
 }

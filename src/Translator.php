@@ -7,6 +7,7 @@ class Translator {
 	const STR_EOL = "\r\n";
 	
 	private $includedModules;
+	private $definedMethods;
 	private $justIncludedModulesOutput;
 	private $ast;
 	private $exportPrefix;
@@ -19,10 +20,14 @@ class Translator {
 	private $statementOperatorHandlers;
 	private $curBlockLevel;
 	
-	public function __construct($ast, &$includedModules = null) {
+	public function __construct($ast, &$includedModules = null, &$definedMethods = null) {
 		$this->includedModules = &$includedModules;
 		if ($this->includedModules === null) {
 			$this->includedModules = [];
+		}
+		$this->definedMethods = &$definedMethods;
+		if ($this->definedMethods === null) {
+			$this->definedMethods = [];
 		}
 		$this->justIncludedModulesOutput = [];
 		$this->ast = $ast;
@@ -65,11 +70,15 @@ class Translator {
 			'\'tfirst' => 'First',
 			'\'tlast' => 'Last',
 			'\'tbefore' => 'Before',
-			'\'tafter' => 'After'
+			'\'tafter' => 'After',
+			'\'tptr' => 'Handle'
 			// ! добавить всякие +1, -1, ? (тернарный иф)
 		];
 		
 		$this->statementOperatorHandlers = [
+			'\'bbinclude' => function($blockItem) {
+				$this->commitOutputLine('Include ' . $this->convertEvaluableBlock($blockItem['items'][1]));
+			},
 			'\'module' => function($blockItem) {
 				$nodeSymbolModuleName = $blockItem['items'][1];
 				$nodeSymbolModuleExports = $blockItem['items'][2];
@@ -88,7 +97,7 @@ class Translator {
 					$moduleName = \implode('.', \array_slice($part1['value']['parts'], 0, -1));
 					if (($moduleName !== '') && (! \in_array($moduleName, $this->includedModules, true))) {
 						$this->includedModules[] = $moduleName;
-						$this->justIncludedModulesOutput[] = (new Transpiler($moduleName, $this->includedModules))->run();
+						$this->justIncludedModulesOutput[] = (new Transpiler($moduleName, $this->includedModules, $this->definedMethods))->run();
 					}
 					$part2 = isset($blockItem['items'][2]) ? $blockItem['items'][2] : null;
 					$alias = \ucfirst(\str_replace('&', '', $part2 !== null ? 
@@ -105,7 +114,7 @@ class Translator {
 						$methodLocation = 'prefix';
 					}
 					$fullName = $this->nodeSymbolToOutIdentifier($part1, null);
-					$this->symbolsToImport[$alias] = [ 'prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst(\str_replace('&', '', $lastPartValue))];
+					$this->symbolsToImport[$alias] = ['prefix' => $fullName !== '' ? $fullName . '__' : '', 'symbol' => \ucfirst(\str_replace('&', '', $lastPartValue))];
 					$this->symbolsToImportMethodLocation[$alias] = $methodLocation;
 				};
 				if ($blockItem['items'][1]['type'] === Parser::T_BLOCK_PRIMARY) {
@@ -118,15 +127,59 @@ class Translator {
 					$handleItem($blockItem);
 				}
 			},
-			'\'function' => function($nodeBlock) {
+			'\'const' => function($nodeBlock) {
+				$this->commitOutputLine('Global ' . $this->convertEvaluableBlock($nodeBlock['items'][1]) . ' = ' . $this->convertEvaluableBlock($nodeBlock['items'][2]));
+			},
+			'\'type' => function($nodeBlock) {
+				$typeName = $this->nodeSymbolToOutIdentifier(
+					$nodeBlock['items'][1], 
+					\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix
+				);
 				$this->commitOutputLine(
-					'Function ' . 
-					$this->nodeSymbolToOutIdentifier(
-						$nodeBlock['items'][1], 
-						\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix
-					) . 
-					'(' . \implode(', ', \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeBlock['items'], 2, -1))) . ')');
-				$this->handleCallListBlock($nodeBlock['items'][\count($nodeBlock['items']) - 1]);
+					'Type ' . $typeName . 
+					self::STR_EOL . \implode(self::STR_EOL, \array_map(function($item) {return "\t" . 'Field ' . $this->nodeSymbolToOutIdentifier($item, null, false);}, \array_slice($nodeBlock['items'], 2))));
+				$this->commitOutputLine('End Type');
+				$this->commitOutputLine('Global ' . $typeName . ' = ' . '1' . self::STR_EOL);
+			},
+			'\'tdelete' => function($nodeBlock) {
+				$this->commitOutputLine('Delete ' . $this->convertEvaluableBlock($nodeBlock['items'][1]));
+			},
+			'\'method' => function($nodeBlock) {
+				$nodeBlock['items'][1]['value']['interface'] = null; // !! omit interface to form method name without it, because lookups will not contain interface part
+				$methodName = $this->nodeSymbolToOutIdentifier(
+					$nodeBlock['items'][1], 
+					\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix
+				);
+				$this->definedMethods[$methodName] = [
+					'nodeBlock' => $nodeBlock,
+					'args' => \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeBlock['items'], 2)),
+					'implementations' => []
+				];
+			},
+			'\'function' => function($nodeBlock) {
+				$functionName = $this->nodeSymbolToOutIdentifier(
+					$nodeBlock['items'][1], 
+					\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix
+				);
+				$lastItem = $nodeBlock['items'][\count($nodeBlock['items']) - 1];
+				$methodImplName = null;
+				if ($lastItem['type'] !== Parser::T_BLOCK_PRIMARY) {
+					$methodImplName = $this->nodeSymbolToOutIdentifier($lastItem, null, false);
+					if (! isset($this->definedMethods[$methodImplName])) {
+						throw new \Exception($methodImplName . ' - ' . \json_encode(\array_keys($this->definedMethods)));
+					}
+					\array_push($this->definedMethods[$methodImplName]['implementations'], [
+						'function' => $functionName,
+						'thisArg' => $this->nodeSymbolToOutIdentifier($nodeBlock['items'][2], null, false)
+					]);
+				}
+				if ($methodImplName !== null) {
+					$this->commitOutputLine('; implementation of ' . $methodImplName);
+				}
+				$this->commitOutputLine(
+					'Function ' . $functionName . 
+					'(' . \implode(', ', \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeBlock['items'], 2, $methodImplName === null ? -1 : -2))) . ')');
+				$this->handleCallListBlock($nodeBlock['items'][\count($nodeBlock['items']) + ($methodImplName === null ? -1 : -2)]);
 				$this->commitOutputLine('End Function' . self::STR_EOL);
 			},
 			'\'return' => function($nodeBlock) {
@@ -181,7 +234,31 @@ class Translator {
 	}
 	
 	public function run() {
+		$hereIsRoot = empty($this->includedModules); // empty($this->includedModules) < 2
+		if ($hereIsRoot) {
+			/*$this->commitOutputLine('Type TObjRef');
+			$this->commitOutputLine("\t" . 'Field obj_handle%');
+			$this->commitOutputLine("\t" . 'Field obj_typeId%');
+			$this->commitOutputLine('End Type' . self::STR_EOL);*/
+		}
 		$this->handleCallListBlock($this->ast);
+		if ($hereIsRoot) {
+			foreach ($this->definedMethods as $methodName => $methodDescr) {
+				$this->commitOutputLine('Function ' . $methodName . '(' . \implode(', ', $methodDescr['args']) . ')');
+				$this->commitOutputLine("\t" . 'Select True');
+				foreach ($methodDescr['implementations'] as $curImpl) {
+					$typeName = \explode('.', $curImpl['thisArg'])[1];
+					$objectCastPart = 'Object.' . $typeName . '(var_this)';
+					$this->commitOutputLine("\t\t" . 'Case ' . $objectCastPart . ' <> Null');
+					$this->commitOutputLine("\t\t\t" . 'Return ' . $curImpl['function'] . '(' . \implode(', ', \array_merge([$objectCastPart], \array_slice($methodDescr['args'], 1))) . ')');
+				}
+				$this->commitOutputLine("\t" . 'Default');
+				$this->commitOutputLine("\t\t" . 'RuntimeError "Implementation not found."');
+				$this->commitOutputLine("\t" . 'End Select');
+				$this->commitOutputLine('End Function');
+			}
+			$this->commitOutputLine('; End of program');
+		}
 		return \implode('', \array_merge($this->justIncludedModulesOutput, $this->outputProgramParts));
 	}
 	
@@ -242,11 +319,12 @@ class Translator {
 		if ($nodeEvaluableBlock['type'] === Parser::T_BLOCK_PRIMARY) {
 			$operands = \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeEvaluableBlock['items'], 1));
 			$operatorSymbol = $nodeEvaluableBlock['items'][0]['value']['parts'][0];
-			if (\in_array($operatorSymbol, $this->operators, true)) {
+			if (isset($this->operators[$operatorSymbol])) {
+				$operatorTargetSymbol = $this->operators[$operatorSymbol];
 				if (\count($operands) === 1) {
 					\array_unshift($operands, '');
 				}
-				return '(' . \implode(' ' . $operatorSymbol . ' ', $operands) . ')';
+				return '(' . \implode(' ' . $operatorTargetSymbol . ' ', $operands) . ')';
 			} else {
 				return $this->nodeSymbolToOutIdentifier($nodeEvaluableBlock['items'][0], null, true) . 
 					'(' . \implode(', ', $operands) . ')';
@@ -344,6 +422,6 @@ class Translator {
 	}
 	
 	private function commitOutputLine($outputLine) {
-		$this->outputProgramParts[] = \str_repeat("\t", $this->curBlockLevel) . $outputLine . self::STR_EOL; 
+		$this->outputProgramParts[] = \str_repeat("\t", \max($this->curBlockLevel, 0)) . $outputLine . self::STR_EOL; 
 	}
 }
