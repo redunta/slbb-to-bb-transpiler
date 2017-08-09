@@ -31,7 +31,7 @@ Basic primitive types are `int` (integer), `str` (string), `float` (really b3d s
 ```clojure
 ('if (> $a $b) ((print "$a is greater than $b")) (< $x $y) ((print "...")) 'else (#|...|#))
 ```
-The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <condE> (<actionsE>...))`
+The pattern is `('if <cond0> (<action0>...) <cond1> (<action1>...) ... 'else <condE> (<actionE>...))`
 
 - Record type declaration:
 ```clojure
@@ -60,7 +60,7 @@ After a function body a method can be referenced to make the function one of pos
 
 ```clojure
 #|
-	(setq a b) Example program shown here just to demonstrate the syntax
+	Example program shown here just to demonstrate the syntax
 |#
 
 ('module application.launcher (run check))
