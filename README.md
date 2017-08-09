@@ -6,13 +6,13 @@ Instead of directly using Blitz3D Basic dialect this transpiler allows you to wr
 
 ## Syntax, shortly
 - Module declaration, must be the topmost expression:
-```clojure
+```scheme
 ('module my.useful.module (exportedA exportedB exportedC))
 ```
 Here a module named `my.useful.module` is declared along with symbols (`exportedA`, `exportedB`, `exportedC`) that are exported from it. Functions, methods, types, constants can be exported.
 
 - Import declarations followed by module declaration have the form:
-```clojure
+```scheme
 ('use required.module.Action)
 ('use required.module.Action ActionAlias)
 ```
@@ -20,7 +20,7 @@ By default imported symbol is available by the last part of the full path,
 but if an alias provided then it will be used instead.
 
 - Variable declaration and/or assignment:
-```clojure
+```scheme
 ('set $varname ::int (+ 3 5))
 ```
 Variable `$varname` declared having `int` type and assigned value of the expression.
@@ -28,13 +28,13 @@ Basic primitive types are `int` (integer), `str` (string), `float` (really b3d s
 `ptr` (for handles, also integer).
 
 - Conditional execution:
-```clojure
+```scheme
 ('if (> $a $b) ((print "$a is greater than $b")) (< $x $y) ((print "...")) 'else (#|...|#))
 ```
 The pattern is `('if <cond0> (<action0>...) <cond1> (<action1>...) ... 'else <condE> (<actionE>...))`
 
 - Record type declaration:
-```clojure
+```scheme
 ('type Box 
 	width ::int
 	height ::int
@@ -43,14 +43,14 @@ The pattern is `('if <cond0> (<action0>...) <cond1> (<action1>...) ... 'else <co
 ```
 
 - Function definition
-```clojure
+```scheme
 ('function duplicate ::int $a ::int (
 	('return (* $a 2))
 ))
 ```
 
 - Method (virtual function prototype) declaration:
-```clojure
+```scheme
 ('method ABox.getVolume ::int $box ::ptr)
 ```
 Method declaration is similar to how function is defined but has no function body and works as accumulator for possible implementations which are to be selected at runtime (during method call) by the first argument type.
@@ -58,7 +58,7 @@ Method declaration is similar to how function is defined but has no function bod
 - Function as method implementation.
 After a function body a method can be referenced to make the function one of possible method implementations for given first argument type.
 
-```clojure
+```scheme
 #|
 	Example program shown here just to demonstrate the syntax
 |#
