@@ -157,6 +157,15 @@ class Translator {
 				];
 			},
 			'\'function' => function($nodeBlock) {
+				$isConstructor = ($nodeBlock['items'][1]['value']['interface'] === 'new');
+				$isDestructor = ($nodeBlock['items'][1]['value']['interface'] === 'delete');
+				if ($isConstructor || $isDestructor) {
+					$baseAllocatorSymbol = $this->nodeSymbolToOutIdentifier([
+						'value' => ['parts' => [$nodeBlock['items'][1]['value']['parts'][0]]],
+						'interface' => null,
+						'type' => Parser::T_SYMBOL_SIMPLE
+					], \in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix);
+				}
 				$functionName = $this->nodeSymbolToOutIdentifier(
 					$nodeBlock['items'][1], 
 					\in_array($nodeBlock['items'][1]['value']['parts'][0], $this->symbolsToExport, true) ? $this->exportPrefix : $this->privatePrefix
@@ -179,7 +188,16 @@ class Translator {
 				$this->commitOutputLine(
 					'Function ' . $functionName . 
 					'(' . \implode(', ', \array_map(function($item) {return $this->convertEvaluableBlock($item);}, \array_slice($nodeBlock['items'], 2, $methodImplName === null ? -1 : -2))) . ')');
+				if ($isConstructor) {
+					$this->commitOutputLine("\t" . 'var_this.' . $baseAllocatorSymbol . ' = New ' . $baseAllocatorSymbol);
+				}
 				$this->handleCallListBlock($nodeBlock['items'][\count($nodeBlock['items']) + ($methodImplName === null ? -1 : -2)]);
+				if ($isConstructor) {
+					$this->commitOutputLine("\t" . 'Return Handle var_this');
+				}
+				if ($isDestructor) {
+					$this->commitOutputLine("\t" . 'Delete var_this');
+				}
 				$this->commitOutputLine('End Function' . self::STR_EOL);
 			},
 			'\'return' => function($nodeBlock) {
