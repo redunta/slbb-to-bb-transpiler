@@ -6,13 +6,13 @@ Instead of directly using Blitz3D Basic dialect this transpiler allows you to wr
 
 ## Syntax, shortly
 - Module declaration, must be the topmost expression:
-```lisp
+```clojure
 ('module my.useful.module (exportedA exportedB exportedC))
 ```
 Here a module named `my.useful.module` is declared along with symbols (`exportedA`, `exportedB`, `exportedC`) that are exported from it. Functions, methods, types, constants can be exported.
 
 - Import declarations followed by module declaration have the form:
-```lisp
+```clojure
 ('use required.module.Action)
 ('use required.module.Action ActionAlias)
 ```
@@ -20,7 +20,7 @@ By default imported symbol is available by the last part of the full path,
 but if an alias provided then it will be used instead.
 
 - Variable declaration and/or assignment:
-```lisp
+```clojure
 ('set $varname ::int (+ 3 5))
 ```
 Variable `$varname` declared having `int` type and assigned value of the expression.
@@ -28,13 +28,13 @@ Basic primitive types are `int` (integer), `str` (string), `float` (really b3d s
 `ptr` (for handles, also integer).
 
 - Conditional execution:
-```lisp
+```clojure
 ('if (> $a $b) ((print "$a is greater than $b")) (< $x $y) ((print "...")) 'else (#|...|#))
 ```
 The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <condE> (<actionsE>...))`
 
 - Record type declaration:
-```lisp
+```clojure
 ('type Box 
 	width ::int
 	height ::int
@@ -43,14 +43,14 @@ The pattern is `('if <cond0> (<actions0>...) <cond1> (<actions1>...) ... 'else <
 ```
 
 - Function definition
-```lisp
+```clojure
 ('function duplicate ::int $a ::int (
 	('return (* $a 2))
 ))
 ```
 
 - Method (virtual function prototype) declaration:
-```lisp
+```clojure
 ('method ABox.getVolume ::int $box ::ptr)
 ```
 Method declaration is similar to how function is defined but has no function body and works as accumulator for possible implementations which are to be selected at runtime (during method call) by the first argument type.
@@ -58,9 +58,9 @@ Method declaration is similar to how function is defined but has no function bod
 - Function as method implementation.
 After a function body a method can be referenced to make the function one of possible method implementations for given first argument type.
 
-```lisp
+```clojure
 #|
-	Example program shown here just to demonstrate the syntax
+	(setq a b) Example program shown here just to demonstrate the syntax
 |#
 
 ('module application.launcher (run check))
