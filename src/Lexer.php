@@ -66,13 +66,19 @@ class Lexer {
 		return $result;
 	}
 	
-	private function peepNextSymbol() {
+	private function peepNextSymbol($temporaryOffset = null) {
 		$result = '';
-		for ($iSym = $this->currentSourceSymbolIndex; $iSym < $this->sourceTextLength; $iSym ++) {
+		for ($iSym = $this->currentSourceSymbolIndex + ($temporaryOffset !== null ? $temporaryOffset : 0); $iSym < $this->sourceTextLength; $iSym ++) {
 			$curSym = $this->sourceText[$iSym];
 			if (! \in_array($curSym, $this->spaceSymbols, true)) {
 				$result = $curSym;
-				$this->currentSourceSymbolIndex = $iSym;
+				if ($temporaryOffset === null) {
+					$this->currentSourceSymbolIndex = $iSym;
+				}
+				break;
+			} else 
+			if ($temporaryOffset !== null) {
+				$result = $curSym;
 				break;
 			}
 		}
@@ -160,11 +166,11 @@ class Lexer {
 				$tempString = \str_replace(self::SYM_BACKSLASH . self::SYM_BACKSLASH, self::SYM_BACKSLASH, $tempString);
 				$this->commitToken(self::T_STRING, $tempString);
 			} else 
-			if (\ctype_digit($peepedSymbol)) {
+			if (\ctype_digit($peepedSymbol) || (($peepedSymbol === '-') && (\ctype_digit($this->peepNextSymbol(1))))) {
 				$curTokenValue = $this->nextTokenValue(\array_filter($this->currentTerminalSymbolsEffective, function($value) {
 					return $value !== '.';
 				}));
-				if (\ctype_digit(\str_replace('.', '', $curTokenValue))) {
+				if (\ctype_digit(\str_replace(array('.', '-'), array('', ''), $curTokenValue))) {
 					$this->commitToken(self::T_NUMBER, $curTokenValue);
 				}
 			} else {

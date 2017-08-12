@@ -139,7 +139,6 @@ class Translator {
 					'Type ' . $typeName . 
 					self::STR_EOL . \implode(self::STR_EOL, \array_map(function($item) {return "\t" . 'Field ' . $this->nodeSymbolToOutIdentifier($item, null, false);}, \array_slice($nodeBlock['items'], 2))));
 				$this->commitOutputLine('End Type');
-				$this->commitOutputLine('Global ' . $typeName . ' = ' . '1' . self::STR_EOL);
 			},
 			'\'tdelete' => function($nodeBlock) {
 				$this->commitOutputLine('Delete ' . $this->convertEvaluableBlock($nodeBlock['items'][1]));
