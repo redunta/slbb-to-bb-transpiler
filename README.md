@@ -4,6 +4,9 @@ Sexps-based Language to BlitzBasic transpiler
 This project is started as an experiment to provide more "convenient" way to use Blitz3D abilities.
 Instead of directly using Blitz3D Basic dialect this transpiler allows you to write program in LISP-like language (*very* limited of course). It makes possible adding virtual methods, and another syntax sugar.
 
+## Usage
+Calling `index.php` through a web server with `source` GET parameter containing full qualified name of the main application module will run transpiler and make corresponding output file (with `.bb` extension) in the document root folder.
+
 ## Syntax, shortly
 - Module declaration, must be the topmost expression:
 ```scheme
